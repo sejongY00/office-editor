@@ -43,9 +43,8 @@ jobs:
           node-version: "24"
           cache: pnpm
 
+      # build-identity.mjs wants a commit SHA (it reads git when BUILD_REVISION is unset).
       - name: Install and build
-        env:
-          BUILD_REVISION: ${{ env.RANUTS_REF }}
         run: |
           pnpm install --frozen-lockfile
           pnpm -r run prepare
