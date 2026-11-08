@@ -43,6 +43,23 @@ jobs:
           node-version: "24"
           cache: pnpm
 
+      # x2t.wasm.br holds Brotli bytes that only work when the host sends Content-Encoding: br
+      # (ranuts' Cloudflare _headers). GitHub Pages cannot, so the browser got compressed bytes
+      # ("expected magic word 00 61 73 6d"). Store the plain WASM under the same name instead:
+      # Emscripten falls back to ArrayBuffer instantiation when the MIME type is not
+      # application/wasm. Costs ~42 MB on first conversion (6.6 MB compressed upstream).
+      # Must run before the build fingerprints the vendor tree (see bin/prepare-docker-wasm.mjs).
+      - name: Decompress x2t WASM for GitHub Pages
+        run: |
+          node -e '
+            const fs = require("fs"), zlib = require("zlib");
+            const p = "public/sdkjs/common/wasm/x2t/x2t.wasm.br";
+            const wasm = zlib.brotliDecompressSync(fs.readFileSync(p));
+            if (!wasm.subarray(0, 4).equals(Buffer.from([0, 97, 115, 109]))) throw new Error("not WASM");
+            fs.writeFileSync(p, wasm);
+            console.log("x2t WASM stored uncompressed:", wasm.length, "bytes");
+          '
+
       # build-identity.mjs wants a commit SHA (it reads git when BUILD_REVISION is unset).
       - name: Install and build
         run: |
