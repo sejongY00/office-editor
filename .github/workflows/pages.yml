@@ -1,0 +1,76 @@
+name: Deploy office editor to GitHub Pages
+
+# Builds ranuts/document (browser-only OnlyOffice editors + x2t WASM) at a pinned tag and
+# publishes the static site. sejong-office embeds it by iframe. To upgrade, change
+# RANUTS_REF and run the workflow (or push).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  RANUTS_REPO: ranuts/document
+  RANUTS_REF: v0.0.9
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out ranuts/document
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.RANUTS_REPO }}
+          ref: ${{ env.RANUTS_REF }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install and build
+        env:
+          BUILD_REVISION: ${{ env.RANUTS_REF }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -r run prepare
+          pnpm run build
+
+      # GitHub Pages ignores _headers/_redirects; serve index.html for unknown routes instead.
+      - name: SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      - name: Report size
+        run: |
+          du -sh dist
+          find dist -type f -size +50M -exec ls -la {} \;
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
